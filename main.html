@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>CA Grid Visualizer</title>
+	<link rel="icon" type="image/x-icon" href="favicon.ico" />
+	<link rel="stylesheet" href="http://cdn.leafletjs.com/leaflet-0.7/leaflet.css"/>
+	<link rel="stylesheet" href="http://ecal.berkeley.edu/smoura-cee.css" type="text/css">
+	<script src="http://d3js.org/d3.v3.min.js"></script>
+	<script charset="utf-8" src="//code.jquery.com/jquery-1.11.1.min.js" type="text/javascript"></script> 
+	<script src="http://cdn.leafletjs.com/leaflet-0.7/leaflet.js"></script>
+
+<!--	Energy Mapping tool developed by Eric Munsing in collaboration with
+	the Cleanweb Berkeley group and the Energy Controls and Applications Laboratory.
+	Intended as a visualizer for .csv and .json data for analysis of energy markets and trends
+	Learn more and get involved at:
+	http://cleanweb.berkeley.edu
+	http://ecal.berkeley.edu
+	Built to accept data from:
+	http://oasis.caiso.com
+
+	Contact: E munsing at berkeley daht edu
+	Verion 0.1 updated November 29, 2014	
+	Copyright 2014 under The MIT License by Eric Munsing-->
+    
+</head>
+
+<style>
+	#footer{ border-top: 2px;
+	         color: #003262; }
+	
+	#map{
+		min-width:500px;
+		min-height: 400px;
+		margin-right: auto;
+		margin-bottom: auto;
+		overflow:hidden;
+	}
+	.header {
+		font-size: x-large;
+		vertical-align: middle;
+	}
+	.playbackButton{
+		width: 50px;
+		text-align: center;
+	}
+	.tooltip {
+		width: 160px;
+		height: 42px;
+		border: 1px solid #fff;
+		color: black;
+		background-color: #ffffff;
+		-webkit-border-radius: 2px;
+		-moz-border-radius: 2px;
+		border-radius: 2px;
+		-moz-box-shadow: 1px 1px 2px #000;
+		-webkit-box-shadow: 1px 1px 2px #000;
+		box-shadow: 1px 1px 2px #000;
+		text-align: left;
+		font: 12px arial;
+		margin-top: 3px;
+	}
+</style>
+
+<body>
+		<div id="titlebar">
+			<a href = "http://ecal.berkeley.edu/"><img style="vertical-align: middle" src="/images/ecal-logo_75px_tall.png" href="http://ecal.berkeley.edu/"></a>
+			<a href = "http://cleanweb.berkeley.edu"><img style="vertical-align: middle" src="/images/cwlogo_75px.jpg" href="http://cleanweb.berkeley.edu/"></a>
+			<span class="header" style="vertical-align: middle"> Cleanweb Berkeley - Energy Mapper</span>
+		</div>
+		<br>
+			Upload a file to plot energy data on the interactive map. Use the slider and controls to step through data fields.		
+		
+	<div id="map" style="width: 700px; height: 600px"></div>
+	<div id="legendBox" style="padding-top: 10px; padding-bottom: 10px">
+		<div id="LegendLabel" style="float: left">Value</div>
+		<div id="legend" style="float: left; padding-left: 10px;"> </div>
+	</div>
+
+	<div id= fileUploadInfo style="padding-left: 5px; padding-bottom: 10px; clear: both;">
+		<span style="font-size: larger">File to upload:</span>
+		<input type="file" id="fileinput" onchange="fileUploader(event);">
+		<a href="data/templateCSV.csv" title="CSV file with a header row, CAISO Pnode codes in the first column, and 'name' as the first column header">Template CSV</a>
+		| <a href="data/SampleCSV.csv" title="LMP Data in $/MWh for August 18-19, 2013">Sample CSV (August 2013)</a>
+ 
+	</div>
+	
+	<div id="controlboard" style="padding-top: 10px;">
+		
+		<div id="MyCheckboxes" style="float: left; padding-left:5px">
+			<input id="generationVisible" checked=TRUE type="checkbox" onchange="changeNodeVis();"> Show Generation Nodes
+			<br>
+			<input id="loadVisible" checked=TRUE type="checkbox" onchange="changeNodeVis();"> Show Load Nodes
+			<br>
+			<input id="recalculateScale" type="checkbox" onchange="updateColorScale();"> Update Scale Each Step
+			<br>
+			<input id="loopPlayback" type="checkbox"> Loop Playback
+		</div>
+		<div id="PlaybackControls" style="float: left; text-align: center; width: 100px">
+			<input id="playbackButton" type=button class="playbackButton" onclick="playbackClick();" value="Play">
+			<br>
+			<input id="stepForward" type=button class="playbackButton" onclick="stepForward();" value=">>">
+			<br>
+			<input id="stepForward" type=button class="playbackButton" onclick="stepBack();" value="<<">
+		</div>
+		<div id="MySliderControls" style="float: left; padding-left: 10px; font-size: larger">
+			<input id="positionSlider" type=range value = 0 min=0 max=2 step=1 onchange="sliderChange(this.value);" style="width:300px">
+			<div id="sliderLabel" style="text-align: center;">
+				Variable Name to Display
+			</div>
+		</div>
+		
+	</div>
+	<div style="height: 20px; clear: both"> </div>
+	<div id='footer'>
+		Copyright (c) 2014 Eric Munsing under the MIT License<br>
+		Contact: EMunsing at berkeley dot edu
+	</div>
+</body>
+ 
+<script type="text/javascript">
+	
+	// -------------------------------------------------//
+	// ----------- FUNCTIONS GO HERE -------------------//
+	// -------------------------------------------------//
+	
+	
+	// ----------- HTML OBJECT EVENT HANDLERS ----------//
+	
+	function fileUploader(event){
+		console.log(event);
+		var myFile = event.target.files[0];
+		
+		if (myFile){
+			var reader = new FileReader();  
+			reader.onload = function(event){	// This event gets called _after_ the content 
+				console.log("Loaded file ",myFile.name);
+				d3.select("title").html(myFile.name);
+				loadCSVdata(0,d3.csv.parse(reader.result));
+			};
+			reader.onerror = function (event) {
+				throw 'Error reading CSV file';
+			};
+			reader.readAsText(myFile) // This triggers the actual 
+		}
+		
+		
+	}
+	
+	function stepForward(){
+		document.getElementById("positionSlider").value = +document.getElementById("positionSlider").value + 1;
+		sliderChange();
+	}
+	function stepBack(){
+		document.getElementById("positionSlider").value = +document.getElementById("positionSlider").value - 1;
+		sliderChange();
+	}
+	
+	function playbackClick() {
+		if (activePlayback == false) {  					// if we are currently in the middle of an animation... 
+			document.getElementById("playbackButton").value = "Pause";	// set the playback button to show the pause symbol; supposed to be html '&#9616;&#9616;'
+			activePlayback = true;
+			
+			playbackTimer = setInterval(function(){playStep();},250);
+			/*			
+			while (+myVariableIndex < (myVariableNames.length-1) ) {		// Need to avoid running off the end of myVariableNames; limit to length-1
+				sliderChange();
+				document.getElementById("positionSlider").value++;	// increment the value of the slider
+			}*/
+			//activePlayback = false;
+			//d3.select("#playbackButton").attr("value","Play");	// set the playback button to show the pause symbol; supposed to be html '&#9616;&#9616;'
+			
+		}
+		else
+		{
+			d3.select("#playbackButton").attr("value","Play"); // supposed to be html '&#9658;'
+			clearInterval(playbackTimer);
+			activePlayback = false;
+		}
+		
+		
+		//code
+	}
+
+	function playStep(){
+		var thisVariableID = document.getElementById("positionSlider").value;
+		thisVariableID++;
+		
+		if ( (thisVariableID == myVariableNames.length-1) && (document.getElementById("loopPlayback").checked == false) ) {
+			clearInterval(playbackTimer);	// If we don't want to loop and we are at the end of the loop, stop playback.
+			d3.select("#playbackButton").attr("value","Play");
+			activePlayback = false;
+		}
+		
+		thisVariableID %= myVariableNames.length;
+		console.log(thisVariableID);
+		document.getElementById("positionSlider").value = thisVariableID;
+		d3.select("#sliderLabel").html(myVariableNames[+thisVariableID]);
+		sliderChange();
+	}
+	
+	function sliderChange(){
+		// When we change to a different data property we're interested in, we need to:
+		// Update the myVariableIndex value, update the text on the label, update the color scale if needed, and show the new data.
+		
+		// Update the variable of interest 
+		myVariableIndex = document.getElementById("positionSlider").value;	// For some reason, d3.select("#positionSlider").attr("value") does not returnor set the current value
+		//console.log(myVariableIndex)
+		
+		// Change the HTML
+		d3.select("#sliderLabel").html(myVariableNames[+myVariableIndex]);  // Set the slider control bar to show the name of the variable
+		
+		if (document.getElementById("recalculateScale").checked == true){
+			updateColorScale();
+		} else {
+			updateData();	
+		}
+
+		
+	}
+	
+	function changeNodeVis(){
+		// Handles changes to the node visibility checkboxes, by toggling visibility of the appropriate nodes.
+		// Relies on nodes having classes matching their node type
+		d3.selectAll(".Generation").style("visibility",function(){if (document.getElementById("generationVisible").checked){return "visible"}else{return "hidden";}})
+		d3.selectAll(".Load").style("visibility",function(){if (document.getElementById("loadVisible").checked){return "visible"}else{return "hidden";}})
+
+	}
+	
+	function update() {
+		// Handles updates to the map scaling and position, using Leaflet.
+		// I don't really understand more about Leaflet. This is sample code which I borrowed. - em
+		
+		myNodes.attr("transform", 
+			function(d,i) {
+				return "translate("+ 
+					map.latLngToLayerPoint(d.LatLng).x +","+ 
+					map.latLngToLayerPoint(d.LatLng).y +")";
+			}
+		);
+	}
+
+	
+	// ----------- DATA HANDLING FUNCTIONS -------------//
+
+	function updateData(){
+		// Updates colors based on changes to data.
+		//console.log("updateData() fired with value ",myVariableNames[myVariableIndex]);
+		//console.log("the size of myTransitionStack is",myNodes[0].length);
+		
+		 myNodes.transition().duration(200)
+			.style("fill",function(d){try{return colorScale(inputScale(+d.energyData[myVariableNames[myVariableIndex]]));}catch(err){return "#aaa";} } );
+		//update();
+
+	}
+	
+	function readJson(collection) {
+		// Collection represents the Javascript Object Array from the JSOn
+		// Each element is an object with name, latitude, longitude, and type properties
+		
+		// Using Javascript's .Map() as we will process and then discard the collection
+		// Data is saved into the global variable myData
+		myData = collection.map(function(d,i,thisObject){
+			var myItem = {};
+			myItem.name = d.name.replace("#","_");  // Note that "#" is illegal for use in an id, and so is replaced with "_"
+			myItem.nodeInfo = d;
+			myItem.LatLng = new L.LatLng( + d.latitude, d.longitude);
+			return myItem;
+		});
+
+		collection = null; // Garbage collection
+		placeNodes();	   // Now that myData is prepped, go ahead and place 
+		
+	}
+	
+	function loadCSVdata(error,csvData) {
+		//Adds the data from the CSV file to the appropriate rows of MyData
+		//CSV files are passed as objects
+		// -------- CSV PRECONDITIONS -------
+		// First row must contain column headers
+		// "name" must be a column header, and be used to store the Node ID
+		// node id value MUST match a value in the JSON file- very important!
+		// Nodes in the CSV can be a subset of the JSON nodes, but not a superset!
+		
+		// Temporary variables
+		var temp;
+		var thisName;
+		var myElement;
+		var playbackTimer;				// This will be set with setInterval() and cleared with clearInterval(playbackTimer)
+		myVariableNames = Object.keys(csvData[0]);  // Update the global variable holding variable names to reflect the key names in the CSV file
+		console.log(myVariableNames);
+		myVariableNames.sort();
+		myVariableNames.pop();			    // Remove the first element from the array, i.e. "name" because we won't be using this to handle data
+		console.log(myVariableNames)
+		
+		for (var i = 0; i<csvData.length; i++){
+			thisElementID = "#".concat(csvData[i].name.replace("#","_")); // Creating an element id string, i.e. "#ACTONSC_6_N001"
+			try {
+				myElement = d3.select(thisElementID) // Finding the DOM element associated with the node we want
+				temp = myElement.datum()	// Accessing the bound data
+				temp.energyData = csvData[i];	// This assigns the full CSV row to the energyData property of the bound data
+				delete temp.energyData.name;		// Remove the "name" property from the energyData, as it is now ready to be bound
+				myElement.datum(temp);		// Setting the value of the element's bound data. >> This also changes the value in myData, which is bound.
+			}
+			catch(err) {};
+		}
+		
+		d3.select("#sliderLabel")
+			.html(myVariableNames[0])
+		
+		document.getElementById("positionSlider").max = myVariableNames.length-1;
+		
+		updateColorScale();  // This will update both the color scale, and also the colors of the nodes
+	}
+	
+		
+	function placeNodes(){
+		//Preconditions: myData is an object array with properties .name, .LatLng, and .nodeInfo.type
+		//Postcondition: Circles placed on the map at appropriate location, given an id matching their node name, and with a class matching their type (generation/load).
+		
+		myNodes = g.selectAll("circle")
+			.data(myData, function(d){return d.name;})		// Index using
+			.enter().append("circle")				
+			.attr("nodeValue",function(d){return d.LatLng;})	// I think this is used by Leaflet?  From template code
+			.attr("id",function(d){return d.name})	// Node name is used as element ID- NOTE: Instances of "#" are illegal and are replaced with "_"
+			.attr("class",function(d){return d.nodeInfo.type;}) //
+			.style("stroke", "none") 				// Styles 
+			.style("opacity", .6) 
+			.style("fill", "#aaa")
+			.attr("r", 5)
+			.on("mouseover", displayToolTip)
+			.on("mousemove", displayToolTip)
+			.on("mouseout", function(){return tooltip.style("visibility", "hidden");}) ;  
+		//myTransitionStack = myNodes;
+		
+		map.on("viewreset", update);
+		update();
+	}
+	
+	function displayToolTip(d){
+		// Show appropriate text in the tooltip.  This will be turned off when 
+		tooltip.style("visibility", "visible");
+		tooltip.style("top", (event.pageY-50)+"px").style("left",(event.pageX-60)+"px");
+		try{
+			tooltip.html(tooltipText.format(d.name,d.nodeInfo.type,d.energyData[myVariableNames[myVariableIndex]]) );
+		}
+		catch(err){
+			tooltip.html(tooltipText.format(d.name,d.nodeInfo.type,"") );		// Some nodes may not have defined energyData for this value
+
+		}
+	}
+	
+	function updateColorScale(){
+		// If the recalculateScale checkbox is checked, then we want to calculate this for each step (default behavior)
+		// if the checkbox is not checked, then we want to calculate this once for all the 
+		
+		var myMax, myMin;
+		
+		if (document.getElementById("recalculateScale").checked == true) {
+			myMax = d3.max(myData, function(d){ try{return +d.energyData[myVariableNames[myVariableIndex]];}catch(err){return null;} } );
+			myMin = d3.min(myData, function(d){ try{return +d.energyData[myVariableNames[myVariableIndex]];}catch(err){return null;} } );
+
+		}
+		else{
+			myMax = d3.max(myData, function(d){ return d3.max( objectValues(d.energyData) ) ;});
+			myMin = d3.min(myData, function(d){ return d3.min( objectValues(d.energyData) ) ;});
+			//myMax = 200;
+			//myMin = 0; 
+		}
+		axisScale.domain([myMin,myMax]);
+		d3.select(".x.axis").call(xAxis)
+		inputScale.domain([myMin, myMax]);
+		updateData();
+	}
+	
+	function objectValues(thisObject) {
+		var theseValues = [];
+		for (key in thisObject) {
+			theseValues.push(+thisObject[key]);
+		}
+		return theseValues;
+	}
+	
+	function parseCAISOxml(myData){
+		console.log(myData)
+	}
+
+	
+	// ----------- GLOBAL VARIABLES GO HERE ---------------//
+	var myData = [];  // This will represent all the data, including both node information and energy data
+	// Elements: d.LatLng, d.name, d.nodeInfo, d.energydata
+	
+	
+	var myTransitionStack = [];
+	var myVariableNames = [];    	// This will hold the headers (except 'name') from our collection
+	var myVariableIndex = 0; 	// This is the data property which we are interested in; this can be changed later
+	var activePlayback = false; 	// Flag variable storing whether the system is playing an animation or not
+
+	var myNodes = [];  		// This will represent the SVG collection of the nodes
+	
+        var map = L.map('map') 
+	
+	// Tooltip for mouseover
+	var tooltip = d3.select("body")
+	.append("div")
+	.attr("class","tooltip")
+	.style("position", "absolute")
+	.style("z-index", "10")
+	.style("visibility", "hidden");
+	
+	var tooltipText = "Name: {0}<br>Type: {1}<br>Value: {2}"; // To be used in the str.format(replace1,replace2,replace3) format
+	
+	// Color scale for color data
+	// Needs a [0,1] range for inputs, generated by functionScale
+	var colorScale = d3.scale.linear()
+	.interpolate(d3.interpolateHcl)
+	
+	//.domain([0,0.25,0.5,0.75,1])
+	//.range(["purple","blue","green","yellow","red"]);
+	
+	//.domain([0,0.33,0.66,1])
+	//.range(["blue","green","yellow","red"]);
+	
+	.domain([0,0.5,1])
+	.range(["green","yellow","red"]);
+	
+	// Input scale maps any data range onto the [0,1] range taken by the color scale
+	var inputScale = d3.scale.linear() // takes numbers and returns a [0,1] domain, which will be used by the color scale
+		.domain([0, 100])          // These will be updated later
+		.range([0, 1])  // The range and colors will stay constant
+		.clamp(true);
+		
+	// ----------------------------------------------------//	
+	//------------ EXECUTION FLOW STARTS HERE -------------//
+	//-----------------------------------------------------//
+	
+	//Initialize map and SVG
+	map.setView([38, -120], 6);
+        mapLink = 
+            '<a href="http://openstreetmap.org">OpenStreetMap</a>';
+        L.tileLayer(
+            'http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; ' + mapLink + ' Contributors',
+            maxZoom: 18,
+            }).addTo(map);
+	map._initPathRoot()
+	
+	// General function useful for processing strings for display
+	if (!String.prototype.format) {
+		String.prototype.format = function() {
+		    var str = this.toString();
+		    if (!arguments.length)
+			return str;
+		    var args = typeof arguments[0],
+			args = (("string" == args || "number" == args) ? arguments : arguments[0]);
+		    for (arg in args)
+			str = str.replace(RegExp("\\{" + arg + "\\}", "gi"), args[arg]);
+		    return str;
+		}
+	}
+	
+	// Map must be initialized to append to the SVG layer
+	var svg = d3.select("#map").select("svg")
+	var g = svg.append("g");	
+	
+	// Configuring the legend / color scale
+	var legend = d3.select("#legend").append("svg").attr("width",650).attr("height",30)
+	var legendRange = d3.range(100); //range of numbers 1-38
+	
+	var legendRects = legend.append("g").selectAll("rect")
+		.data(legendRange)
+		.enter()
+		.append("rect"); //creates 38 rectangles with no attributes
+		
+	legendRects.attr({
+		width: 6,
+		height: 10,
+		y: 0,
+		x: function(d,i) {
+		  return i * 6 + 10; //the bars are spread out 15px + 0 to the right
+		},
+		fill: function(d,i) {
+		  return colorScale(inputScale(d)); //take each rect's data (d) and turn it into a color
+		}
+	      });
+	
+	axisScale = d3.scale.linear().domain([0,100]).range([0,600]);
+	
+	xAxis = d3.svg.axis().scale(axisScale).tickSize(1).tickSubdivide(true);
+	
+	legend.append("g")
+		.attr("class","x axis")
+		.attr("transform","translate(10,10)")
+		.call(xAxis);
+	
+	// This will call the initial node placement.  
+	d3.json("data/LMP_PointMap_Nodes.json", readJson);
+	
+	
+	placeNodes();
+
+	// OLD hard-coded CSV: csv is identified here
+	// fill the variable myData with the csv data, then initiates the callback in loadData
+	//var fileName = "kwhValue_step_02.csv";
+
+	d3.csv("/data/SampleCSV.csv",null ,loadCSVdata);   // No accessor function currently specified.  loadCSVdata is passed an object array with properties corresponding to column headers.
+	
+	//d3.select("title").html(fileName);
+	
+	
+	// --------------- TO-DO ITEMS -----------------//
+	
+	
+	
+	
+</script>
+</body>
+</html>
